@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+env/
+
+# Build
+build/
+dist/
+*.spec.bak
+
+# PaddleOCR cached models
+~/.paddleocr/
+.paddleocr/
+
+# Playwright browsers (cached system-wide, but exclude any local copy)
+.playwright/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local config
+config.local.json
+*.log
+
+# OCR temp files
+captures/
+*.tmp.png
