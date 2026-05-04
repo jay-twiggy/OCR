@@ -5,6 +5,10 @@ PySide6>=6.6.0
 paddleocr>=2.7.0
 paddlepaddle>=2.6.0
 
+# Secondary OCR engine for ensemble (run in parallel with PaddleOCR, pick best result by confidence)
+# 의존성: PyTorch (~250MB CPU only), easyocr (~50MB), 첫 실행 시 모델 추가 다운로드(~80MB)
+easyocr>=1.7.0
+
 # Screen capture
 mss>=9.0.1
 
@@ -21,3 +25,16 @@ pynput>=1.7.6
 
 # Clipboard (cross-platform fallback)
 pyperclip>=1.8.2
+
+# QR / barcode recognition
+# - 기본: OpenCV의 QRCodeDetector (cv2는 이미 의존성에 있음, 시스템 라이브러리 불필요)
+# - 선택: pyzbar는 1D 바코드(EAN/CODE128 등)까지 인식. Windows에선 VC++ 2013 redist 필요.
+#   `pip install pyzbar` 실행 후 DLL 로딩 가능하면 자동 활성화.
+# pyzbar>=0.1.9
+
+# Translation (Google free web backend, no API key required)
+# Subject to rate limits; for production use DeepL/Papago with API key.
+deep-translator>=1.11.4
+
+# PDF page rendering for "파일에서 OCR" (PyMuPDF — small, no system deps)
+pymupdf>=1.24.0

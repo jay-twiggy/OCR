@@ -35,7 +35,15 @@ Thumbs.db
 # Local config
 config.local.json
 *.log
+logs/
 
 # OCR temp files
 captures/
 *.tmp.png
+
+# Test/debug screenshots and design handoff archive (extracted version is committed)
+화면 캡처*.png
+ocr.zip
+
+# bkit plugin metadata (frequently changing local state)
+docs/.pdca-status.json

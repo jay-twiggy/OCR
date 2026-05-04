@@ -80,14 +80,19 @@ src/
     └── clipboard.py      # 클립보드 헬퍼
 ```
 
-## 향후 추가 예정 (확장 가능 구조)
+## 추가된 기능 (`src/features/`)
 
+- **QR 인식** (`features/barcode.py`) — OpenCV QR 디텍터 기본. `pyzbar` 설치 시 1D 바코드까지 인식. 결과창에 별도 패널로 표시.
+- **자동 전처리** (`features/preprocess.py`) — UI 노출 없이 백그라운드 적용:
+  - 어두운 배경(흰 글자/검은 배경 터미널) 자동 감지 후 색반전
+  - 텍스트 기울어짐 자동 보정 (감지 시에만)
+  - 음영/조명 불균일 사진은 자동 적응형 이진화 (스크린샷처럼 깨끗한 이미지는 건너뜀)
+
+## 향후 추가 예정
+
+- OCR 히스토리 (SQLite)
+- 번역 연동 (DeepL / Papago)
 - 표 인식 (PaddleOCR PP-Structure)
 - 수식 인식 (pix2tex / LaTeX)
-- QR / 바코드 동시 인식
-- 번역 연동 (DeepL / Papago)
-- OCR 히스토리 (SQLite)
-- 다크 모드
-- 이미지 전처리 토글 (이진화 / 디스큐)
 
 각 기능은 `src/features/` 아래 모듈로 추가하면 기존 코드 변경 없이 결합 가능합니다.

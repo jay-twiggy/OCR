@@ -1,0 +1,250 @@
+/* ============================================================================
+   Apple iOS & iPadOS 26 — Design Tokens
+   Source: "iOS and iPadOS 26 (Community)" Figma Apple Design Resources
+   Light values are the default; dark mode overrides under .dark / @media
+   ============================================================================ */
+
+/* SF Pro is Apple's proprietary system font and not redistributable.
+   We load Inter Variable as the closest open substitute (matches metrics,
+   weights, and the optical-size feeling well enough for prototyping).
+   FLAG: substitute SF Pro / SF Pro Rounded / SF Mono with the real .otf
+   files if you can ship them. */
+@import url("https://rsms.me/inter/inter.css");
+
+:root {
+  /* ----- Type families ------------------------------------------------- */
+  --font-sf:        "SF Pro", "SF Pro Text", -apple-system, BlinkMacSystemFont,
+                    "Inter", "Inter var", system-ui, sans-serif;
+  --font-sf-rounded:"SF Pro Rounded", "SF Compact Rounded", -apple-system,
+                    "Inter", system-ui, sans-serif;
+  --font-sf-mono:   "SF Mono", ui-monospace, "Menlo", "Consolas", monospace;
+  --font-display:   "SF Pro Display", "SF Pro", "Inter", system-ui, sans-serif;
+
+  /* ----- System colors (light mode, opaque) ---------------------------- */
+  --sys-red:        rgb(255, 59, 48);
+  --sys-orange:     rgb(255, 149, 0);
+  --sys-yellow:     rgb(255, 204, 0);
+  --sys-green:      rgb(52, 199, 89);
+  --sys-mint:       rgb(0, 199, 190);
+  --sys-teal:       rgb(48, 176, 199);
+  --sys-cyan:       rgb(50, 173, 230);
+  --sys-blue:       rgb(0, 122, 255);
+  --sys-indigo:     rgb(88, 86, 214);
+  --sys-purple:     rgb(175, 82, 222);
+  --sys-pink:       rgb(255, 45, 85);
+  --sys-brown:      rgb(162, 132, 94);
+
+  /* Tint — the "iOS blue" interactive color */
+  --tint:           var(--sys-blue);
+
+  /* ----- Grays --------------------------------------------------------- */
+  --gray:           rgb(142, 142, 147);
+  --gray-2:         rgb(174, 174, 178);
+  --gray-3:         rgb(199, 199, 204);
+  --gray-4:         rgb(209, 209, 214);
+  --gray-5:         rgb(229, 229, 234);
+  --gray-6:         rgb(242, 242, 247);
+
+  /* ----- Labels (text) — light mode ------------------------------------ */
+  --label:              rgb(0, 0, 0);
+  --label-secondary:    rgba(60, 60, 67, 0.60);
+  --label-tertiary:     rgba(60, 60, 67, 0.30);
+  --label-quaternary:   rgba(60, 60, 67, 0.18);
+  --placeholder-text:   rgba(60, 60, 67, 0.30);
+
+  /* ----- Fills (controls) — light mode --------------------------------- */
+  --fill-primary:       rgba(120, 120, 128, 0.20);
+  --fill-secondary:     rgba(120, 120, 128, 0.16);
+  --fill-tertiary:      rgba(118, 118, 128, 0.12);
+  --fill-quaternary:    rgba(116, 116, 128, 0.08);
+
+  /* ----- Backgrounds --------------------------------------------------- */
+  --bg:                 rgb(255, 255, 255);
+  --bg-secondary:       rgb(242, 242, 247);
+  --bg-tertiary:        rgb(255, 255, 255);
+
+  --bg-grouped:         rgb(242, 242, 247);
+  --bg-grouped-secondary:rgb(255, 255, 255);
+  --bg-grouped-tertiary:rgb(242, 242, 247);
+
+  /* ----- Separators ---------------------------------------------------- */
+  --separator:          rgba(60, 60, 67, 0.29);
+  --separator-opaque:   rgb(198, 198, 200);
+
+  /* ----- Liquid Glass (iOS 26 signature material) ---------------------- */
+  --glass-tint:         rgba(245, 245, 245, 0.60);
+  --glass-stroke:       rgba(255, 255, 255, 0.50);
+  --glass-shadow:       0 8px 40px rgba(0, 0, 0, 0.12);
+  --glass-blur:         saturate(180%) blur(40px);
+
+  /* ----- Radii (Apple "squircle" curve approximated with border-radius) */
+  --radius-xs:          4px;   /* tags, tiny chips */
+  --radius-sm:          8px;
+  --radius-md:          12px;  /* buttons */
+  --radius-lg:          16px;  /* cards */
+  --radius-xl:          22px;  /* large cards / sheets */
+  --radius-2xl:         34px;  /* liquid glass medium */
+  --radius-3xl:         48px;  /* device bezel inner */
+  --radius-pill:        999px;
+
+  /* ----- Elevation (shadows are deliberately subtle on iOS) ------------ */
+  --shadow-1:           0 1px 2px rgba(0,0,0,0.04);
+  --shadow-2:           0 4px 16px rgba(0,0,0,0.08);
+  --shadow-3:           0 8px 40px rgba(0,0,0,0.12);  /* glass */
+  --shadow-modal:       0 20px 60px rgba(0,0,0,0.20);
+
+  /* ----- Spacing scale (8pt grid + 4pt half-step) ---------------------- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ----- Hit targets --------------------------------------------------- */
+  --hit-target:         44px;   /* iOS minimum tappable size */
+
+  /* ============================================================
+     TYPE SCALE — Apple Dynamic Type (Large / default)
+     name           size / line-height / weight / tracking
+     ============================================================ */
+  --type-large-title-size:     34px;
+  --type-large-title-line:     41px;
+  --type-large-title-weight:   700;
+  --type-large-title-tracking: 0.374px;
+
+  --type-title-1-size:         28px;
+  --type-title-1-line:         34px;
+  --type-title-1-weight:       700;
+  --type-title-1-tracking:     0.36px;
+
+  --type-title-2-size:         22px;
+  --type-title-2-line:         28px;
+  --type-title-2-weight:       700;
+  --type-title-2-tracking:     0.35px;
+
+  --type-title-3-size:         20px;
+  --type-title-3-line:         25px;
+  --type-title-3-weight:       600;
+  --type-title-3-tracking:     0.38px;
+
+  --type-headline-size:        17px;
+  --type-headline-line:        22px;
+  --type-headline-weight:      600;
+  --type-headline-tracking:   -0.408px;
+
+  --type-body-size:            17px;
+  --type-body-line:            22px;
+  --type-body-weight:          400;
+  --type-body-tracking:       -0.408px;
+
+  --type-callout-size:         16px;
+  --type-callout-line:         21px;
+  --type-callout-weight:       400;
+  --type-callout-tracking:    -0.32px;
+
+  --type-subhead-size:         15px;
+  --type-subhead-line:         20px;
+  --type-subhead-weight:       400;
+  --type-subhead-tracking:    -0.24px;
+
+  --type-footnote-size:        13px;
+  --type-footnote-line:        18px;
+  --type-footnote-weight:      400;
+  --type-footnote-tracking:   -0.08px;
+
+  --type-caption-1-size:       12px;
+  --type-caption-1-line:       16px;
+  --type-caption-1-weight:     400;
+  --type-caption-1-tracking:   0;
+
+  --type-caption-2-size:       11px;
+  --type-caption-2-line:       13px;
+  --type-caption-2-weight:     400;
+  --type-caption-2-tracking:   0.066px;
+}
+
+/* ============================================================================
+   Dark mode
+   ============================================================================ */
+.dark, [data-theme="dark"] {
+  --label:              rgb(255, 255, 255);
+  --label-secondary:    rgba(235, 235, 245, 0.60);
+  --label-tertiary:     rgba(235, 235, 245, 0.30);
+  --label-quaternary:   rgba(235, 235, 245, 0.16);
+  --placeholder-text:   rgba(235, 235, 245, 0.30);
+
+  --fill-primary:       rgba(120, 120, 128, 0.36);
+  --fill-secondary:     rgba(120, 120, 128, 0.32);
+  --fill-tertiary:      rgba(118, 118, 128, 0.24);
+  --fill-quaternary:    rgba(118, 118, 128, 0.18);
+
+  --bg:                 rgb(0, 0, 0);
+  --bg-secondary:       rgb(28, 28, 30);
+  --bg-tertiary:        rgb(44, 44, 46);
+
+  --bg-grouped:         rgb(0, 0, 0);
+  --bg-grouped-secondary: rgb(28, 28, 30);
+  --bg-grouped-tertiary:  rgb(44, 44, 46);
+
+  --separator:          rgba(84, 84, 88, 0.65);
+  --separator-opaque:   rgb(56, 56, 58);
+
+  --glass-tint:         rgba(38, 38, 38, 0.60);
+  --glass-stroke:       rgba(255, 255, 255, 0.10);
+
+  --gray:               rgb(142, 142, 147);
+  --gray-2:             rgb(99, 99, 102);
+  --gray-3:             rgb(72, 72, 74);
+  --gray-4:             rgb(58, 58, 60);
+  --gray-5:             rgb(44, 44, 46);
+  --gray-6:             rgb(28, 28, 30);
+
+  --tint:               rgb(0, 145, 255);
+}
+
+/* ============================================================================
+   Semantic typography classes
+   ============================================================================ */
+.large-title, h1.ios { font: var(--type-large-title-weight) var(--type-large-title-size)/var(--type-large-title-line) var(--font-sf); letter-spacing: var(--type-large-title-tracking); color: var(--label); }
+.title-1, h2.ios     { font: var(--type-title-1-weight) var(--type-title-1-size)/var(--type-title-1-line) var(--font-sf); letter-spacing: var(--type-title-1-tracking); color: var(--label); }
+.title-2, h3.ios     { font: var(--type-title-2-weight) var(--type-title-2-size)/var(--type-title-2-line) var(--font-sf); letter-spacing: var(--type-title-2-tracking); color: var(--label); }
+.title-3, h4.ios     { font: var(--type-title-3-weight) var(--type-title-3-size)/var(--type-title-3-line) var(--font-sf); letter-spacing: var(--type-title-3-tracking); color: var(--label); }
+.headline            { font: var(--type-headline-weight) var(--type-headline-size)/var(--type-headline-line) var(--font-sf); letter-spacing: var(--type-headline-tracking); color: var(--label); }
+.body, p.ios         { font: var(--type-body-weight) var(--type-body-size)/var(--type-body-line) var(--font-sf); letter-spacing: var(--type-body-tracking); color: var(--label); }
+.callout             { font: var(--type-callout-weight) var(--type-callout-size)/var(--type-callout-line) var(--font-sf); letter-spacing: var(--type-callout-tracking); color: var(--label); }
+.subhead             { font: var(--type-subhead-weight) var(--type-subhead-size)/var(--type-subhead-line) var(--font-sf); letter-spacing: var(--type-subhead-tracking); color: var(--label); }
+.footnote            { font: var(--type-footnote-weight) var(--type-footnote-size)/var(--type-footnote-line) var(--font-sf); letter-spacing: var(--type-footnote-tracking); color: var(--label-secondary); }
+.caption-1           { font: var(--type-caption-1-weight) var(--type-caption-1-size)/var(--type-caption-1-line) var(--font-sf); letter-spacing: var(--type-caption-1-tracking); color: var(--label-secondary); }
+.caption-2           { font: var(--type-caption-2-weight) var(--type-caption-2-size)/var(--type-caption-2-line) var(--font-sf); letter-spacing: var(--type-caption-2-tracking); color: var(--label-secondary); }
+
+/* ============================================================================
+   Liquid Glass utility classes — iOS 26 signature surface
+   ============================================================================ */
+.liquid-glass {
+  background: var(--glass-tint);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 0.5px solid var(--glass-stroke);
+  box-shadow: var(--glass-shadow);
+  border-radius: var(--radius-2xl);
+}
+.liquid-glass-thin    { --glass-tint: rgba(245,245,245,0.40); }
+.liquid-glass-thick   { --glass-tint: rgba(245,245,245,0.80); }
+.liquid-glass-chrome  { --glass-tint: rgba(255,255,255,0.72); }
+.dark .liquid-glass-thin   { --glass-tint: rgba(38,38,38,0.40); }
+.dark .liquid-glass-thick  { --glass-tint: rgba(38,38,38,0.80); }
+.dark .liquid-glass-chrome { --glass-tint: rgba(28,28,30,0.72); }
+
+/* Page baseline */
+html, body {
+  font-family: var(--font-sf);
+  color: var(--label);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}

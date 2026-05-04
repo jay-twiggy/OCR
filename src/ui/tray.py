@@ -25,6 +25,7 @@ def _make_icon() -> QIcon:
 
 
 class TrayIcon(QSystemTrayIcon):
+    show_requested = Signal()
     fullscreen_requested = Signal()
     region_requested = Signal()
     browser_requested = Signal()
@@ -34,6 +35,12 @@ class TrayIcon(QSystemTrayIcon):
         super().__init__(_make_icon(), parent)
         hk = default_hotkeys()
         menu = QMenu()
+
+        show_act = QAction("창 표시", menu)
+        show_act.triggered.connect(self.show_requested.emit)
+        menu.addAction(show_act)
+
+        menu.addSeparator()
 
         full = QAction(f"전체화면 OCR\t{hotkey_display(hk.fullscreen)}", menu)
         full.triggered.connect(self.fullscreen_requested.emit)
@@ -58,6 +65,6 @@ class TrayIcon(QSystemTrayIcon):
         self.activated.connect(self._on_activated)
 
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
-        # 트레이 아이콘 더블 클릭 = 구역 OCR (가장 자주 쓸 모드)
-        if reason == QSystemTrayIcon.DoubleClick:
-            self.region_requested.emit()
+        # 트레이 아이콘 클릭/더블클릭 → 메인 창 보이기 (가장 자연스러운 동작)
+        if reason in (QSystemTrayIcon.DoubleClick, QSystemTrayIcon.Trigger):
+            self.show_requested.emit()
