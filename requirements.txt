@@ -1,0 +1,23 @@
+# UI
+PySide6>=6.6.0
+
+# OCR engine (Korean + English)
+paddleocr>=2.7.0
+paddlepaddle>=2.6.0
+
+# Screen capture
+mss>=9.0.1
+
+# Browser-based full-page capture (Option A)
+playwright>=1.40.0
+
+# Image processing
+Pillow>=10.0.0
+opencv-python>=4.8.0
+numpy>=1.24.0,<2.0.0
+
+# Global hotkeys (cross-platform)
+pynput>=1.7.6
+
+# Clipboard (cross-platform fallback)
+pyperclip>=1.8.2
