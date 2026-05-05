@@ -46,11 +46,44 @@ if _missing:
 
 # ── 데이터 (모델 + 브라우저 + 라이브러리 리소스) ─────────────────
 # _bundled/ 아래 모아 두고 런타임 훅에서 사용자 홈으로 시드 / 환경변수 지정
+def _select_playwright_assets() -> list[tuple[str, str]]:
+    """Playwright 캐시에서 필요한 항목만 선별 번들.
+
+    원본 ~/AppData/Local/ms-playwright 폴더에는 통상 다음이 섞여 있음:
+        chromium-1217                    ✅ full chromium (browser_capture.py 가 사용)
+        chromium-1208                    ❌ 구버전 (브라우저 자동 업데이트 잔재)
+        chromium_headless_shell-1217     ❌ headless 전용 빌드 (현재 미사용)
+        chromium_headless_shell-1208     ❌ 위 + 구버전
+        ffmpeg-1011                      ✅ 동영상 코덱 (Playwright 의존)
+        winldd-1007                      ✅ Windows DLL 의존성 분석기
+
+    같은 prefix 가 여러 버전 있으면 사전식 최신만 선택.
+    'chromium-' 와 'chromium_headless_shell-' 는 하이픈/언더스코어로 자동 구분.
+    """
+    if not PLAYWRIGHT_DIR.exists():
+        return []
+    keep_prefixes = ('chromium-', 'ffmpeg-', 'winldd-')
+    latest: dict[str, pathlib.Path] = {}
+    for child in PLAYWRIGHT_DIR.iterdir():
+        if not child.is_dir():
+            continue
+        for prefix in keep_prefixes:
+            if child.name.startswith(prefix):
+                cur = latest.get(prefix)
+                if cur is None or child.name > cur.name:
+                    latest[prefix] = child
+                break
+    selected = sorted(latest.values(), key=lambda p: p.name)
+    for p in selected:
+        print(f"[spec] playwright bundle: {p.name}", file=sys.stderr)
+    return [(str(p), f"_bundled/ms-playwright/{p.name}") for p in selected]
+
+
 datas = [
     (str(PADDLEX_DIR), '_bundled/.paddlex'),
     (str(EASYOCR_DIR), '_bundled/.EasyOCR'),
-    (str(PLAYWRIGHT_DIR), '_bundled/ms-playwright'),
 ]
+datas += _select_playwright_assets()
 
 for pkg in (
     'paddle', 'paddleocr', 'paddlex',
