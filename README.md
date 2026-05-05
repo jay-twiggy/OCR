@@ -74,6 +74,25 @@ pyinstaller build/build_windows.spec --clean --noconfirm --workpath build/_pyi_w
 `--workpath` 옵션으로 PyInstaller 임시 산출물을 `build/_pyi_work/` 에 격리합니다
 (spec/hook 과 섞이지 않게).
 
+### Windows 설치파일 (Inno Setup)
+
+PyInstaller dist 를 사용자 친화적인 Setup .exe 로 패키징합니다.
+
+```powershell
+# 1) Inno Setup 6 설치 (한 번만)
+winget install JRSoftware.InnoSetup
+
+# 2) 위의 PyInstaller 빌드가 끝난 상태에서:
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\binave_ocr.iss
+```
+
+산출물: `installer/dist/BinaveOCR-Setup-0.1.0.exe` (예상 약 1GB)
+
+설치파일 특징:
+- 사용자 폴더(`%LOCALAPPDATA%\Programs\BinaveOCR`)에 설치 — UAC 권한 요청 없음
+- 시작 메뉴 / 바탕화면 바로가기 / 자동 시작은 설치 마법사에서 선택
+- 한국어 / 영어 자동 감지
+
 ### macOS 빌드
 
 > TODO: `build/build_mac.spec` 작성 예정. 현재는 Windows 우선.

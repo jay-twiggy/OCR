@@ -18,6 +18,9 @@ env/
 /dist/
 *.spec.bak
 
+# Installer (Inno Setup 산출물 무시 — .iss 스크립트는 보존)
+/installer/dist/
+
 # PaddleOCR cached models
 ~/.paddleocr/
 .paddleocr/
