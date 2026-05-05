@@ -1,4 +1,4 @@
-"""SnipOCR 메인 컨트롤러 (싱글 윈도우 모드).
+"""Binave OCR 메인 컨트롤러 (싱글 윈도우 모드).
 
 QApplication을 생성하고 트레이/단축키/오버레이 + 메인 결과창 1개를 관리.
 새 OCR 결과는 모두 같은 창에 로드된다 (히스토리는 좌측 사이드바로 접근).
@@ -43,13 +43,13 @@ class _BrowserCaptureWorker(QThread):
             self.failed.emit(str(exc))
 
 
-class SnipOCRApp(QObject):
+class BinaveOCRApp(QObject):
     def __init__(self) -> None:
         super().__init__()
         self._qapp = QApplication.instance() or QApplication(sys.argv)
         self._qapp.setQuitOnLastWindowClosed(False)
-        self._qapp.setApplicationName("SnipOCR")
-        self._qapp.setOrganizationName("SnipOCR")
+        self._qapp.setApplicationName("Binave OCR")
+        self._qapp.setOrganizationName("Binave OCR")
         apply_app_font(self._qapp)
 
         self._overlay: RegionOverlay | None = None
@@ -159,7 +159,7 @@ class SnipOCRApp(QObject):
             "브라우저로 페이지를 로딩하고 캡처 중…", None, 0, 0,
             self._main_window,
         )
-        self._browser_progress.setWindowTitle("SnipOCR")
+        self._browser_progress.setWindowTitle("Binave OCR")
         self._browser_progress.setCancelButton(None)
         self._browser_progress.setMinimumDuration(0)
         self._browser_progress.show()
@@ -230,5 +230,5 @@ def main() -> int:
     QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
-    app = SnipOCRApp()
+    app = BinaveOCRApp()
     return app.run()

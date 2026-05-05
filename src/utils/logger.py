@@ -1,6 +1,6 @@
-"""SnipOCR 로깅 설정.
+"""Binave OCR 로깅 설정.
 
-로그는 `<repo>/logs/snipocr.log` 파일과 stderr에 동시에 기록한다.
+로그는 `<repo>/logs/binave_ocr.log` 파일과 stderr에 동시에 기록한다.
 하나의 파일은 1MB까지 보관하고 5개까지 로테이션.
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ def init_logging(level: int = logging.INFO) -> Path:
 
     log_dir = Path(__file__).resolve().parents[2] / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / "snipocr.log"
+    log_path = log_dir / "binave_ocr.log"
 
     if _INITIALIZED:
         return log_path

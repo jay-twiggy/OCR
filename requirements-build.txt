@@ -1,0 +1,4 @@
+# 빌드 전용 의존성 (PyInstaller로 dist 만들 때만 필요).
+# 배포 산출물에는 포함되지 않습니다.
+-r requirements.txt
+pyinstaller>=6.20

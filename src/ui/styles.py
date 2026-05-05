@@ -1,4 +1,4 @@
-"""SnipOCR 디자인 토큰 (iOS 26 스타일).
+"""Binave OCR 디자인 토큰 (iOS 26 스타일).
 
 iOS / iPadOS 디자인 시스템의 색·타입·간격·재료 토큰을 한 곳에서 관리.
 다크모드는 지원하지 않는다 (라이트 단일).
@@ -31,7 +31,7 @@ PLACEHOLDER = "rgba(60, 60, 67, 0.3)"
 WALLPAPER_GRADIENT = "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #e8eef7, stop:0.5 #f3e8ee, stop:1 #fef3e6)"
 SURFACE_LIGHT = "rgba(255, 255, 255, 0.55)"
 SURFACE_PANEL = "rgba(255, 255, 255, 0.85)"
-SURFACE_SIDEBAR = "rgba(242, 242, 247, 0.92)"
+SURFACE_SIDEBAR = "rgba(242, 242, 247, 0.72)"  # 핸드오프 스펙: 그라데이션이 비치게
 SURFACE_GLASS = "rgba(255, 255, 255, 0.72)"
 
 # Fills
@@ -214,6 +214,10 @@ QPlainTextEdit:focus {{
     background: rgba(255, 255, 255, 0.95);
 }}
 """
+
+# 루트 캔버스 — 핸드오프 스펙의 wallpaper gradient (자식 위젯들이 반투명으로 비침)
+# ID selector(#rootCanvas)로 자식에게 cascade 안 되게 격리
+ROOT_CANVAS_QSS = f"QWidget#rootCanvas {{ background: {WALLPAPER_GRADIENT}; }}"
 
 # 우측 디테일 컨테이너
 DETAIL_CONTAINER_QSS = f"QWidget {{ background: {SURFACE_LIGHT}; }}"

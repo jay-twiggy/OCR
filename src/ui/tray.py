@@ -61,7 +61,7 @@ class TrayIcon(QSystemTrayIcon):
         menu.addAction(quit_act)
 
         self.setContextMenu(menu)
-        self.setToolTip("SnipOCR — 스크린샷 OCR")
+        self.setToolTip("Binave OCR — 스크린샷 OCR")
         self.activated.connect(self._on_activated)
 
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:

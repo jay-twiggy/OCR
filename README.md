@@ -1,4 +1,4 @@
-# SnipOCR
+# Binave OCR
 
 윈도우 스니핑 도구 스타일의 스크린샷 OCR 도구. Windows + macOS 데스크톱 지원.
 
@@ -47,18 +47,37 @@ python main.py
 
 ## 빌드 (단일 실행 파일)
 
+### 사전 준비 (Windows 기준)
+
+빌드는 **OCR 모델/Chromium이 이미 캐시된 환경**을 전제로 합니다. 처음이면 다음을
+한 번씩 실행해 두세요.
+
 ```bash
-pip install pyinstaller
+# 1) 의존성 + PyInstaller 설치
+pip install -r requirements-build.txt
 
-# Windows
-pyinstaller build/build_windows.spec --clean --noconfirm
+# 2) 한 번 실행 → PaddleOCR/EasyOCR 모델 자동 다운로드 (수십 MB)
+python main.py        # OCR 한 번 시도 후 종료
 
-# macOS
-pyinstaller build/build_mac.spec --clean --noconfirm
+# 3) Playwright Chromium 설치 (~250MB)
+playwright install chromium
 ```
 
-빌드 산출물은 `dist/SnipOCR/` (Windows) 또는 `dist/SnipOCR.app` (macOS)에 생성됩니다.
-PaddleOCR + paddlepaddle + Chromium 의존성 때문에 결과물은 약 300~500MB입니다.
+### Windows 빌드
+
+```bash
+pyinstaller build/build_windows.spec --clean --noconfirm --workpath build/_pyi_work
+```
+
+산출물: `dist/BinaveOCR/BinaveOCR.exe` (+ 동봉 폴더, 예상 ~700MB-1.2GB)
+
+`--workpath` 옵션으로 PyInstaller 임시 산출물을 `build/_pyi_work/` 에 격리합니다
+(spec/hook 과 섞이지 않게).
+
+### macOS 빌드
+
+> TODO: `build/build_mac.spec` 작성 예정. 현재는 Windows 우선.
+> Mac 빌드는 macOS 환경에서만 가능합니다 (PyInstaller 크로스 컴파일 불가).
 
 ## 프로젝트 구조
 

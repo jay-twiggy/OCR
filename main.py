@@ -1,4 +1,4 @@
-"""SnipOCR 실행 진입점."""
+"""Binave OCR 실행 진입점."""
 from __future__ import annotations
 
 import logging
@@ -16,9 +16,9 @@ from src.utils.logger import init_logging
 
 def main() -> int:
     log_path = init_logging()
-    log = logging.getLogger("snipocr.main")
+    log = logging.getLogger("binave_ocr.main")
     log.info("=" * 60)
-    log.info("SnipOCR starting (log file: %s)", log_path)
+    log.info("Binave OCR starting (log file: %s)", log_path)
 
     def _excepthook(exc_type, exc, tb):
         log.error("Uncaught exception:\n%s", "".join(traceback.format_exception(exc_type, exc, tb)))

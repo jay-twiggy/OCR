@@ -61,8 +61,8 @@ from ..features.preprocess import auto as auto_preprocess
 from ..features.translate import LANG_LABELS, TranslationResult, translate
 from ..utils.clipboard import copy_text
 
-_SETTINGS_ORG = "SnipOCR"
-_SETTINGS_APP = "SnipOCR"
+_SETTINGS_ORG = "Binave OCR"
+_SETTINGS_APP = "Binave OCR"
 _KEY_TARGET_LANG = "translate/target_lang"
 
 
@@ -406,7 +406,7 @@ class ResultWindow(QMainWindow):
         self._busy_overlay: BusyOverlay | None = None
         self._new_ocr_sheet: NewOCRSheet | None = None
 
-        self.setWindowTitle("SnipOCR — 결과")
+        self.setWindowTitle("Binave OCR — 결과")
         self.resize(1180, 720)
         self._build_ui()
         self._refresh_history()
@@ -419,7 +419,10 @@ class ResultWindow(QMainWindow):
 
     def _build_ui(self) -> None:
         # ── 본문 컨테이너 (헤더 + 분할 영역) ──────────────────────────────
+        # 핸드오프 스펙: 루트 캔버스에 그라데이션 → 자식 패널들이 반투명으로 비침
         central = QWidget(self)
+        central.setObjectName("rootCanvas")
+        central.setStyleSheet(S.ROOT_CANVAS_QSS)
         outer = QVBoxLayout(central)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -474,7 +477,7 @@ class ResultWindow(QMainWindow):
         layout = QHBoxLayout(header)
         layout.setContentsMargins(20, 0, 20, 0)
         layout.setSpacing(0)
-        title = QLabel("SnipOCR", header)
+        title = QLabel("Binave OCR", header)
         title.setObjectName("appTitle")
         layout.addWidget(title)
         layout.addStretch(1)
@@ -629,7 +632,7 @@ class ResultWindow(QMainWindow):
         layout.setSpacing(10)
 
         # 1) 타이틀
-        title = QLabel("SnipOCR", panel)
+        title = QLabel("Binave OCR", panel)
         title.setStyleSheet(
             f"font-weight: 600; font-size: 22px; color: {S.LABEL}; padding: 4px 6px;"
         )

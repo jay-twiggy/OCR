@@ -11,9 +11,11 @@ __pycache__/
 venv/
 env/
 
-# Build
-build/
-dist/
+# Build (PyInstaller workdir 무시 — spec/hook 파일은 보존)
+/build/*
+!/build/*.spec
+!/build/*.py
+/dist/
 *.spec.bak
 
 # PaddleOCR cached models
