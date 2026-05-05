@@ -118,6 +118,23 @@ QPushButton:pressed {{ background: {FILL_TERTIARY}; }}
 QPushButton:disabled {{ color: {LABEL_TERTIARY}; }}
 """
 
+# iOS 26 Tinted Button — 옅은 tint 배경 + tint 글자색 (눈에 띄지만 PRIMARY 보다 약함)
+TINTED_BUTTON_QSS = f"""
+QPushButton {{
+    color: {TINT};
+    background: rgba(0, 122, 255, 0.10);
+    border: none;
+    border-radius: 12px;
+    padding: 5px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+}}
+QPushButton:hover  {{ background: rgba(0, 122, 255, 0.18); }}
+QPushButton:pressed {{ background: rgba(0, 122, 255, 0.26); }}
+QPushButton:disabled {{ color: {LABEL_TERTIARY}; background: {FILL_QUATERNARY}; }}
+"""
+
 # 언어 풀다운 / 일반 콤보
 COMBO_QSS = f"""
 QComboBox {{

@@ -715,19 +715,38 @@ class ResultWindow(QMainWindow):
         self._text.setStyleSheet(S.PANEL_CARD_QSS)
         layout.addWidget(self._text, stretch=1)
 
-        # 번역 결과 — 처음엔 숨김, 사용자가 번역 버튼 누르면 표시
+        # 번역 결과 — 처음엔 숨김, 사용자가 번역 버튼 누르면 표시.
+        # 헤더: 좌측 라벨 + 우측 [복사] 버튼 (번역 결과만 클립보드로).
         self._translate_label = QLabel("번역", panel)
         self._translate_label.setStyleSheet(
             f"font-size: 11px; font-weight: 600; color: {S.TINT}; "
             "letter-spacing: 0.06em; padding: 4px 4px 0;"
         )
+        self._translate_copy_btn = QPushButton("복사", panel)
+        self._translate_copy_btn.setMinimumHeight(30)
+        self._translate_copy_btn.setMinimumWidth(64)
+        self._translate_copy_btn.setCursor(Qt.PointingHandCursor)
+        self._translate_copy_btn.setStyleSheet(S.TINTED_BUTTON_QSS)
+        self._translate_copy_btn.clicked.connect(self._copy_translation)
+
+        translate_header_layout = QHBoxLayout()
+        translate_header_layout.setContentsMargins(0, 0, 0, 0)
+        translate_header_layout.setSpacing(8)
+        translate_header_layout.addWidget(self._translate_label)
+        translate_header_layout.addStretch(1)
+        translate_header_layout.addWidget(self._translate_copy_btn)
+
+        self._translate_header = QWidget(panel)
+        self._translate_header.setLayout(translate_header_layout)
+
         self._translate_text = QPlainTextEdit(panel)
         self._translate_text.setReadOnly(True)
         self._translate_text.setPlaceholderText("번역 결과가 여기에 표시됩니다…")
         self._translate_text.setStyleSheet(S.PANEL_CARD_QSS)
-        self._translate_label.hide()
+
+        self._translate_header.hide()
         self._translate_text.hide()
-        layout.addWidget(self._translate_label)
+        layout.addWidget(self._translate_header)
         layout.addWidget(self._translate_text, stretch=1)
 
         return panel
@@ -741,7 +760,7 @@ class ResultWindow(QMainWindow):
             return
         self._set_busy(True, "OCR 인식 중…")
         self._text.setPlainText("")
-        self._show_busy_overlay("다시 인식 중…")
+        self._show_busy_overlay("인식 중…")
         self._worker = _OCRWorker(self._image, self._lang)
         self._worker.finished_ok.connect(self._on_ocr_ok)
         self._worker.failed.connect(self._on_ocr_failed)
@@ -841,8 +860,7 @@ class ResultWindow(QMainWindow):
 
         # 패널 초기화
         self._text.setPlainText("")
-        self._translate_label.hide()
-        self._translate_text.hide()
+        self._set_translation_visible(False)
         self._translate_text.setPlainText("")
         self._render_barcodes([])
 
@@ -958,11 +976,10 @@ class ResultWindow(QMainWindow):
                 f"번역 → {LANG_LABELS.get(entry.translation_target, entry.translation_target)}"
             )
             self._translate_text.setPlainText(entry.translation_text)
-            self._translate_label.show()
-            self._translate_text.show()
+            self._set_translation_visible(True)
+            self._translate_copy_btn.setEnabled(bool(entry.translation_text.strip()))
         else:
-            self._translate_label.hide()
-            self._translate_text.hide()
+            self._set_translation_visible(False)
             self._translate_text.setPlainText("")
         # 바코드/진행바 정리
         self._render_barcodes([])
@@ -1023,9 +1040,9 @@ class ResultWindow(QMainWindow):
 
         label_text = f"번역 → {LANG_LABELS.get(target, target)}"
         self._translate_label.setText(label_text)
-        self._translate_label.show()
         self._translate_text.setPlainText("번역 중…")
-        self._translate_text.show()
+        self._set_translation_visible(True)
+        self._translate_copy_btn.setEnabled(False)  # 결과 도착 후 활성화
         self._translate_btn.setEnabled(False)
         self._translate_btn.setText("번역 중…")
 
@@ -1039,6 +1056,7 @@ class ResultWindow(QMainWindow):
         self._translate_btn.setText("번역")
         if result.text:
             self._translate_text.setPlainText(result.text)
+            self._translate_copy_btn.setEnabled(True)
             self._status.showMessage(
                 f"번역 완료 ({result.engine}, {LANG_LABELS.get(result.target_lang, result.target_lang)})",
                 4000,
@@ -1054,12 +1072,26 @@ class ResultWindow(QMainWindow):
                     log.exception("history: translation update failed")
         else:
             self._translate_text.setPlainText("(번역 결과 없음)")
+            self._translate_copy_btn.setEnabled(False)
 
     def _on_translate_failed(self, message: str) -> None:
         self._translate_btn.setEnabled(True)
         self._translate_btn.setText("번역")
         self._translate_text.setPlainText("")
+        self._translate_copy_btn.setEnabled(False)
         QMessageBox.warning(self, "번역 실패", f"번역 중 오류:\n{message}")
+
+    def _set_translation_visible(self, visible: bool) -> None:
+        """번역 헤더(라벨 + 복사 버튼)와 텍스트 박스를 함께 보이거나 숨김."""
+        self._translate_header.setVisible(visible)
+        self._translate_text.setVisible(visible)
+
+    def _copy_translation(self) -> None:
+        text = self._translate_text.toPlainText().strip()
+        if not text or text in ("번역 중…", "(번역 결과 없음)"):
+            return
+        copy_text(text)
+        show_toast(self, "번역 결과가 클립보드에 복사됨")
 
     def _render_barcodes(self, barcodes: list[Barcode]) -> None:
         if not barcodes:

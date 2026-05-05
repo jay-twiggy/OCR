@@ -142,7 +142,7 @@ class _Spinner(QWidget):
 class BusyOverlay(QWidget):
     """부모 위젯 전체를 덮는 작업 중 오버레이. 카드+스피너+라벨."""
 
-    def __init__(self, parent: QWidget, label: str = "다시 인식 중…") -> None:
+    def __init__(self, parent: QWidget, label: str = "인식 중…") -> None:
         super().__init__(parent)
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet("BusyOverlay { background: rgba(0, 0, 0, 0.18); }")
