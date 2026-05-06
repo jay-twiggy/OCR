@@ -11,10 +11,11 @@ __pycache__/
 venv/
 env/
 
-# Build (PyInstaller workdir 무시 — spec/hook 파일은 보존)
+# Build (PyInstaller workdir 무시 — spec/hook/entitlements 파일은 보존)
 /build/*
 !/build/*.spec
 !/build/*.py
+!/build/*.plist
 /dist/
 *.spec.bak
 

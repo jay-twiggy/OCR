@@ -1,0 +1,188 @@
+name: Build macOS
+
+# 트리거:
+#   - workflow_dispatch: GitHub UI 에서 수동 실행 (테스트 빌드용)
+#   - push tag v*: v0.2.1 같은 버전 태그 push 시 자동 빌드 + Release 업로드
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-latest  # macos-14+ = Apple Silicon (arm64)
+
+    env:
+      PYTHON_VERSION: '3.12'
+      APP_NAME: 'Binave OCR'
+      APP_BUNDLE_ID: 'com.binave.ocr'
+
+    steps:
+      # ─────────────────────────────────────────────────────────
+      # 1) 소스 + Python
+      # ─────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Show environment
+        run: |
+          uname -a
+          sw_vers
+          python --version
+          arch
+
+      # ─────────────────────────────────────────────────────────
+      # 2) 의존성 설치
+      # ─────────────────────────────────────────────────────────
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-build.txt
+
+      - name: Install Playwright Chromium
+        run: |
+          python -m playwright install chromium
+
+      # ─────────────────────────────────────────────────────────
+      # 3) OCR 모델 사전 다운로드 (~/.paddlex, ~/.EasyOCR)
+      # ─────────────────────────────────────────────────────────
+      - name: Download OCR models (PaddleOCR + EasyOCR)
+        run: python scripts/prepare_models.py
+
+      # ─────────────────────────────────────────────────────────
+      # 4) PyInstaller 빌드 → dist/Binave OCR.app
+      # ─────────────────────────────────────────────────────────
+      - name: Build .app with PyInstaller
+        run: |
+          pyinstaller build/build_mac.spec --clean --noconfirm \
+            --workpath build/_pyi_work
+          ls -la dist/
+
+      # ─────────────────────────────────────────────────────────
+      # 5) 코드 서명 (Developer ID Application)
+      #    Secrets 미설정 시 스킵 — 서명 안 해도 친구가 우클릭→열기로 사용 가능
+      # ─────────────────────────────────────────────────────────
+      - name: Import signing certificate
+        if: ${{ env.APPLE_CERTIFICATE_P12_BASE64 != '' }}
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # 임시 키체인 생성 + 인증서 import
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain-db
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > $RUNNER_TEMP/cert.p12
+          security import $RUNNER_TEMP/cert.p12 -k "$KEYCHAIN_PATH" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # 사용 가능한 인증서 표시 (디버깅용)
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Codesign .app
+        if: ${{ env.APPLE_CERTIFICATE_P12_BASE64 != '' }}
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+        run: |
+          # Developer ID Application 인증서 자동 탐지 (이름 매칭)
+          IDENTITY=$(security find-identity -v -p codesigning | \
+            grep "Developer ID Application" | head -n1 | \
+            awk -F'"' '{print $2}')
+          echo "Signing identity: $IDENTITY"
+
+          # 깊은 서명 (모든 .dylib/.so/.framework 까지)
+          # --options runtime: hardened runtime 활성화 (공증 필수)
+          # --entitlements: Python ctypes / dynamic loading 허용
+          codesign --force --deep --timestamp --options runtime \
+            --entitlements build/entitlements.plist \
+            --sign "$IDENTITY" \
+            "dist/Binave OCR.app"
+
+          # 검증
+          codesign --verify --deep --strict --verbose=2 "dist/Binave OCR.app"
+
+      # ─────────────────────────────────────────────────────────
+      # 6) DMG 생성
+      # ─────────────────────────────────────────────────────────
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Create DMG
+        run: |
+          mkdir -p installer/dist
+          # 버전 추출 (src/__init__.py 의 __version__)
+          VERSION=$(python -c "import sys; sys.path.insert(0,'src'); from src import __version__; print(__version__)")
+          echo "Version: $VERSION"
+          DMG_PATH="installer/dist/BinaveOCR-${VERSION}.dmg"
+
+          # 기존 dmg 가 있으면 제거 (CI 재실행 대비)
+          rm -f "$DMG_PATH"
+
+          create-dmg \
+            --volname "Binave OCR ${VERSION}" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "Binave OCR.app" 175 200 \
+            --hide-extension "Binave OCR.app" \
+            --app-drop-link 425 200 \
+            "$DMG_PATH" \
+            "dist/Binave OCR.app"
+
+          ls -la "$DMG_PATH"
+          echo "DMG_PATH=$DMG_PATH" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      # ─────────────────────────────────────────────────────────
+      # 7) DMG 공증 (notarize) — Apple 서버에 .dmg 올려서 인증
+      #    Secrets 미설정 시 스킵
+      # ─────────────────────────────────────────────────────────
+      - name: Notarize DMG
+        if: ${{ env.APPLE_ID != '' }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcrun notarytool submit "$DMG_PATH" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          # staple — 공증 결과를 DMG 안에 박아 오프라인에서도 검증 가능
+          xcrun stapler staple "$DMG_PATH"
+          xcrun stapler validate "$DMG_PATH"
+
+      # ─────────────────────────────────────────────────────────
+      # 8) 산출물 업로드 (workflow run 페이지에서 다운로드)
+      # ─────────────────────────────────────────────────────────
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BinaveOCR-mac-${{ env.VERSION }}
+          path: ${{ env.DMG_PATH }}
+          retention-days: 14
+
+      # ─────────────────────────────────────────────────────────
+      # 9) GitHub Release 자동 첨부 (태그 push 일 때만)
+      # ─────────────────────────────────────────────────────────
+      - name: Attach to Release (tag only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.DMG_PATH }}
+          draft: true
+          generate_release_notes: true
