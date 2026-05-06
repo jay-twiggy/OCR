@@ -13,7 +13,7 @@
 
 #define MyAppName       "Binave OCR"
 #define MyAppShortName  "BinaveOCR"
-#define MyAppVersion    "0.1.0"
+#define MyAppVersion    "0.2.0"
 #define MyAppPublisher  "Binave"
 #define MyAppExeName    "BinaveOCR.exe"
 #define MyAppSourceDir  "..\dist\BinaveOCR"

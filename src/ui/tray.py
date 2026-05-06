@@ -29,6 +29,7 @@ class TrayIcon(QSystemTrayIcon):
     fullscreen_requested = Signal()
     region_requested = Signal()
     browser_requested = Signal()
+    settings_requested = Signal()
     quit_requested = Signal()
 
     def __init__(self, parent=None) -> None:
@@ -55,6 +56,10 @@ class TrayIcon(QSystemTrayIcon):
         menu.addAction(browser)
 
         menu.addSeparator()
+
+        settings_act = QAction("설정…", menu)
+        settings_act.triggered.connect(self.settings_requested.emit)
+        menu.addAction(settings_act)
 
         quit_act = QAction("종료", menu)
         quit_act.triggered.connect(self.quit_requested.emit)

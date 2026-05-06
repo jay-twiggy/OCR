@@ -17,6 +17,7 @@ from .core import browser_capture, capture
 from .features import file_loader
 from .ui.overlay import RegionOverlay
 from .ui.result_window import ResultWindow
+from .ui.settings_dialog import SettingsDialog
 from .ui.styles import apply_app_font
 from .ui.tray import TrayIcon
 from .ui.url_input import UrlInputDialog
@@ -69,6 +70,7 @@ class BinaveOCRApp(QObject):
         self._tray.fullscreen_requested.connect(self.fullscreen_ocr)
         self._tray.region_requested.connect(self.region_ocr)
         self._tray.browser_requested.connect(self.browser_ocr)
+        self._tray.settings_requested.connect(self.open_settings)
         self._tray.quit_requested.connect(self._quit_app)
         self._tray.show()
 
@@ -90,6 +92,14 @@ class BinaveOCRApp(QObject):
         # 싱글 윈도우니까 closeEvent ignore가 종료를 막음 → 직접 deleteLater 후 quit
         self._main_window.deleteLater()
         self._qapp.quit()
+
+    def open_settings(self) -> None:
+        """클라우드 OCR 설정 다이얼로그. 저장 시 결과창에 새 설정 즉시 반영."""
+        dialog = SettingsDialog(self._main_window if self._main_window.isVisible() else None)
+        if dialog.exec() == SettingsDialog.Accepted:
+            # 결과창의 cloud config 캐시 무효화 (다음 OCR 부터 새 설정 사용)
+            if hasattr(self._main_window, "reload_cloud_config"):
+                self._main_window.reload_cloud_config()
 
     # ── 1) 전체화면 OCR ─────────────────────────────────────────
     def fullscreen_ocr(self) -> None:

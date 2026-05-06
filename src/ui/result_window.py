@@ -57,7 +57,15 @@ from ..core.easyocr_engine import EasyOCREngine
 from ..core.ocr_engine import OCREngine, OCRResult
 from ..features import history
 from ..features.barcode import Barcode, detect_barcodes
-from ..features.preprocess import auto as auto_preprocess
+from ..features.cloud_ocr import (
+    POLICY_AUTO_FALLBACK,
+    POLICY_CLOUD_PREFERRED,
+    POLICY_LOCAL_ONLY,
+    CloudOCRConfig,
+    CloudOCRError,
+    make_provider,
+)
+from ..features.preprocess import auto as auto_preprocess, enhance_for_retry
 from ..features.translate import LANG_LABELS, TranslationResult, translate
 from ..utils.clipboard import copy_text
 
@@ -267,21 +275,141 @@ class _OCRWorker(QThread):
     finished_ok = Signal(object, object, str)  # OCRResult, list[Barcode], engine
     failed = Signal(str)
 
-    def __init__(self, image: Image.Image, lang: str = "korean") -> None:
+    def __init__(
+        self, image: Image.Image, lang: str = "korean",
+        cloud_config: CloudOCRConfig | None = None,
+        force_cloud: bool = False,
+    ) -> None:
         super().__init__()
         self._image = image
         self._lang = lang
+        self._cloud_config = cloud_config or CloudOCRConfig()
+        self._force_cloud = force_cloud  # 수동 버튼 시 True — 로컬 스킵하고 클라우드만
 
     def run(self) -> None:
         try:
+            # 수동 클라우드 호출: 로컬 OCR 건너뛰고 클라우드로만 인식
+            if self._force_cloud:
+                result, engine = self._cloud_only()
+                barcodes = detect_barcodes(self._image)
+                self.finished_ok.emit(result, barcodes, engine)
+                return
+
+            cfg = self._cloud_config
+
+            # CLOUD_PREFERRED + 키 OK: 로컬 건너뛰고 클라우드 first.
+            # 클라우드 실패/빈 결과면 로컬로 자연 폴백.
+            if cfg.policy == POLICY_CLOUD_PREFERRED and cfg.is_ready():
+                try:
+                    cloud_result, cloud_engine = self._cloud_only()
+                    if cloud_result.lines:
+                        log.info("OCR worker: CLOUD_PREFERRED — cloud succeeded, skipping local")
+                        barcodes = detect_barcodes(self._image)
+                        self.finished_ok.emit(cloud_result, barcodes, cloud_engine)
+                        return
+                    log.warning("OCR worker: CLOUD_PREFERRED returned empty → local fallback")
+                except CloudOCRError as exc:
+                    log.warning("OCR worker: CLOUD_PREFERRED failed (%s) → local fallback", exc)
+
             processed = auto_preprocess(self._image)
             result, engine = self._run_ensemble(processed)
+            # 1차 결과가 약하면 향상 전처리 적용 후 재시도, 더 좋은 쪽 채택
+            result, engine = self._maybe_retry_enhanced(processed, result, engine)
+
+            # AUTO_FALLBACK 정책일 때만 자동 클라우드 호출.
+            # LOCAL_ONLY: 자동 호출 X. CLOUD_PREFERRED: 위에서 이미 시도했으니 스킵.
+            if cfg.policy == POLICY_AUTO_FALLBACK:
+                result, engine = self._maybe_cloud_fallback(self._image, result, engine)
             # 바코드는 원본 이미지 기준 (전처리로 코드가 깨질 수 있음)
             barcodes = detect_barcodes(self._image)
             self.finished_ok.emit(result, barcodes, engine)
         except Exception as exc:  # noqa: BLE001
             log.exception("OCR worker failed")
             self.failed.emit(str(exc))
+
+    def _maybe_retry_enhanced(
+        self, processed: Image.Image, result: OCRResult, engine: str,
+    ) -> tuple[OCRResult, str]:
+        """1차 결과가 약하면 CLAHE + 언샤프 적용 후 재시도. 더 좋은 쪽 선택.
+
+        트리거 조건 (engine-aware): paddle conf < 0.75 또는 easy conf < 0.50,
+        또는 인식 글자 수가 너무 적음 (< 10).
+        """
+        if not _is_low_quality(result, engine):
+            return result, engine
+
+        log.info(
+            "OCR worker: low-quality 1st pass (engine=%s, %s) → enhanced retry",
+            engine, _summary(result),
+        )
+        try:
+            enhanced = enhance_for_retry(processed)
+        except Exception:  # noqa: BLE001
+            log.exception("enhance_for_retry failed; keeping original result")
+            return result, engine
+
+        try:
+            enh_result, enh_engine = self._run_ensemble(enhanced)
+        except Exception:  # noqa: BLE001
+            log.exception("enhanced ensemble failed; keeping original result")
+            return result, engine
+
+        best, best_engine, reason = _pick_better_pass(result, engine, enh_result, enh_engine)
+        log.info(
+            "OCR worker: retry decision — %s (orig=%s/%s, enh=%s/%s)",
+            reason, engine, _summary(result), enh_engine, _summary(enh_result),
+        )
+        return best, best_engine
+
+    def _maybe_cloud_fallback(
+        self, original_image: Image.Image, result: OCRResult, engine: str,
+    ) -> tuple[OCRResult, str]:
+        """자동 폴백: 로컬 결과가 여전히 약하면 클라우드 호출 후 더 좋은 쪽 채택.
+
+        설정 OFF 또는 키 미설정이면 즉시 패스. 네트워크/API 오류는 로컬 결과 유지.
+        """
+        cfg = self._cloud_config
+        if not cfg.auto_fallback or not cfg.is_ready():
+            return result, engine
+        if not _is_low_quality(result, engine):
+            return result, engine
+
+        provider = make_provider(cfg)
+        if provider is None:
+            return result, engine
+
+        log.info(
+            "OCR worker: low-quality after enhanced retry (engine=%s, %s) → cloud fallback (%s)",
+            engine, _summary(result), provider.name,
+        )
+        try:
+            cloud_result = provider.recognize(original_image)
+        except CloudOCRError as exc:
+            log.warning("Cloud OCR failed (%s): %s — keeping local result", provider.name, exc)
+            return result, engine
+
+        cloud_engine = f"cloud:{provider.name}"
+        best, best_engine, reason = _pick_better_pass(result, engine, cloud_result, cloud_engine)
+        log.info(
+            "OCR worker: cloud fallback decision — %s (local=%s/%s, cloud=%s/%s)",
+            reason, engine, _summary(result), cloud_engine, _summary(cloud_result),
+        )
+        return best, best_engine
+
+    def _cloud_only(self) -> tuple[OCRResult, str]:
+        """수동 클라우드 인식 — 로컬 건너뛰고 클라우드만 사용."""
+        cfg = self._cloud_config
+        provider = make_provider(cfg)
+        if provider is None:
+            log.warning("Cloud-only requested but no provider configured")
+            return OCRResult(lines=[]), "cloud:unconfigured"
+        log.info("OCR worker: manual cloud-only request (%s)", provider.name)
+        try:
+            result = provider.recognize(self._image)
+            return result, f"cloud:{provider.name}"
+        except CloudOCRError as exc:
+            log.error("Cloud-only failed (%s): %s", provider.name, exc)
+            raise
 
     def _run_ensemble(self, image: Image.Image) -> tuple[OCRResult, str]:
         """PaddleOCR과 EasyOCR을 병렬로 돌리고 더 좋은 결과 선택. 엔진명도 반환."""
@@ -363,6 +491,60 @@ def _avg_conf(result: OCRResult | None) -> float:
     return sum(l.confidence for l in result.lines) / len(result.lines)
 
 
+def _is_low_quality(result: OCRResult | None, engine: str) -> bool:
+    """엔진별 임계값으로 OCR 결과의 약함 여부 판정 (재시도 트리거).
+
+    PaddleOCR 와 EasyOCR 의 conf 척도가 다르므로 engine-aware:
+      paddle: avg < 0.75
+      easy:   avg < 0.50
+    또는 글자 수 < 10 (어떤 엔진이든 너무 적음).
+    """
+    if result is None or not result.lines:
+        return True
+    if _char_count(result) < 10:
+        return True
+    avg = _avg_conf(result)
+    if engine == "paddle" and avg < 0.75:
+        return True
+    if engine == "easy" and avg < 0.50:
+        return True
+    return False
+
+
+def _pick_better_pass(
+    a: OCRResult, a_engine: str,
+    b: OCRResult, b_engine: str,
+) -> tuple[OCRResult, str, str]:
+    """원본 vs 향상-전처리 두 OCR pass 결과 비교.
+
+    글자 수 ±10% 초과 시 더 많은 쪽. 비슷할 때는 같은 엔진끼리만 conf 비교 (이종 비교 금지).
+    이종 엔진 + 글자 수 비슷이면 보수적으로 a (원본) 유지.
+    """
+    a_chars = _char_count(a)
+    b_chars = _char_count(b)
+    if a_chars == 0 and b_chars == 0:
+        return a, a_engine, "both empty, keep original"
+    if a_chars == 0:
+        return b, b_engine, "original empty"
+    if b_chars == 0:
+        return a, a_engine, "enhanced empty"
+
+    denom = max(a_chars, b_chars, 1)
+    diff = (b_chars - a_chars) / denom
+    if abs(diff) > 0.10:
+        if b_chars > a_chars:
+            return b, b_engine, f"enhanced chars {b_chars} > {a_chars}"
+        return a, a_engine, f"original chars {a_chars} > {b_chars}"
+
+    if a_engine == b_engine:
+        a_avg = _avg_conf(a)
+        b_avg = _avg_conf(b)
+        if b_avg > a_avg + 0.02:
+            return b, b_engine, f"chars≈, same engine conf {b_avg:.2f}>{a_avg:.2f}"
+        return a, a_engine, f"chars≈, same engine conf {a_avg:.2f}≥{b_avg:.2f}"
+    return a, a_engine, "chars≈, cross-engine — keep original (safer)"
+
+
 def _char_count(result: OCRResult | None) -> int:
     if result is None:
         return 0
@@ -405,6 +587,10 @@ class ResultWindow(QMainWindow):
         self._last_lines: list = []  # OCRLine 리스트 — source view 디텍션 박스용
         self._busy_overlay: BusyOverlay | None = None
         self._new_ocr_sheet: NewOCRSheet | None = None
+
+        # 클라우드 OCR 설정 캐시 (다이얼로그에서 변경 시 reload_cloud_config() 호출)
+        from .settings_dialog import load_cloud_config
+        self._cloud_config: CloudOCRConfig = load_cloud_config()
 
         self.setWindowTitle("Binave OCR — 결과")
         self.resize(1180, 720)
@@ -475,13 +661,38 @@ class ResultWindow(QMainWindow):
         header.setFixedHeight(40)
         header.setStyleSheet(S.TOP_HEADER_QSS)
         layout = QHBoxLayout(header)
-        layout.setContentsMargins(20, 0, 20, 0)
+        layout.setContentsMargins(20, 0, 12, 0)
         layout.setSpacing(0)
         title = QLabel("Binave OCR", header)
         title.setObjectName("appTitle")
         layout.addWidget(title)
         layout.addStretch(1)
+
+        # 우측 끝: 설정 톱니 버튼 (트레이 메뉴가 숨겨져 있어 발견 어려움 → 헤더에서 직접 접근)
+        self._settings_btn = QPushButton("⚙", header)
+        self._settings_btn.setObjectName("headerSettingsBtn")
+        self._settings_btn.setFlat(True)
+        self._settings_btn.setCursor(Qt.PointingHandCursor)
+        self._settings_btn.setFixedSize(32, 32)
+        self._settings_btn.setToolTip("설정")
+        self._settings_btn.setStyleSheet(
+            f"QPushButton#headerSettingsBtn {{ "
+            f"  border: none; background: transparent; "
+            f"  color: {S.LABEL_SECONDARY}; font-size: 18px; border-radius: 8px; "
+            f"}} "
+            f"QPushButton#headerSettingsBtn:hover {{ background: {S.FILL_QUATERNARY}; color: {S.LABEL}; }} "
+            f"QPushButton#headerSettingsBtn:pressed {{ background: {S.FILL_TERTIARY}; }}"
+        )
+        self._settings_btn.clicked.connect(self._open_settings)
+        layout.addWidget(self._settings_btn)
         return header
+
+    def _open_settings(self) -> None:
+        """헤더 톱니 버튼: 설정 다이얼로그 오픈. 저장 시 cloud config 즉시 반영."""
+        from .settings_dialog import SettingsDialog
+        dialog = SettingsDialog(self)
+        if dialog.exec() == SettingsDialog.Accepted:
+            self.reload_cloud_config()
 
     def _build_inline_toolbar(self, parent: QWidget) -> QWidget:
         """우측 패널 상단에 들어가는 인라인 툴바 (토글 변경 무관 고정)."""
@@ -504,8 +715,30 @@ class ResultWindow(QMainWindow):
         self._save_text_btn = self._make_secondary_button("저장", self._save_text)
         self._save_image_btn = self._make_secondary_button("이미지", self._save_image)
         self._retry_btn = self._make_secondary_button("다시 OCR", self._start_ocr)
-        for btn in (self._copy_btn, self._save_text_btn, self._save_image_btn, self._retry_btn):
+        self._cloud_btn = self._make_secondary_button("☁ 클라우드 인식", self._start_cloud_ocr)
+        for btn in (self._copy_btn, self._save_text_btn, self._save_image_btn,
+                    self._retry_btn, self._cloud_btn):
             layout.addWidget(btn)
+
+        # 자동 OCR 정책 콤보 — 클라우드 인식 버튼 옆 (즉시 전환)
+        self._policy_combo = QComboBox(bar)
+        self._policy_combo.setMinimumHeight(34)
+        self._policy_combo.setStyleSheet(S.COMBO_QSS)
+        self._policy_combo.addItem("로컬만", POLICY_LOCAL_ONLY)
+        self._policy_combo.addItem("자동 폴백", POLICY_AUTO_FALLBACK)
+        self._policy_combo.addItem("클라우드 우선", POLICY_CLOUD_PREFERRED)
+        self._policy_combo.setToolTip(
+            "자동 OCR 동작 정책\n"
+            "• 로컬만: 클라우드 자동 호출 X (수동 버튼만)\n"
+            "• 자동 폴백: 로컬 결과 약할 때만 클라우드 (비용 ↓)\n"
+            "• 클라우드 우선: 키 있으면 무조건 클라우드 (속도/품질 ↑)"
+        )
+        self._policy_combo.currentIndexChanged.connect(self._on_policy_combo_changed)
+        layout.addWidget(self._policy_combo)
+
+        # 초기 정책/클라우드 버튼 상태 동기화 (콤보 시그널 연결 후 호출 — 시그널은 무시됨)
+        self._sync_policy_combo_from_config()
+        self._update_cloud_button_state()
 
         # 구분선
         sep = QFrame(bar)
@@ -744,8 +977,18 @@ class ResultWindow(QMainWindow):
         self._translate_text.setPlaceholderText("번역 결과가 여기에 표시됩니다…")
         self._translate_text.setStyleSheet(S.PANEL_CARD_QSS)
 
+        # OCR 결과 ↔ 번역 결과 사이 구분선 (둘 다 흰 카드라 시각 분리 어려움)
+        self._translate_separator = QFrame(panel)
+        self._translate_separator.setFrameShape(QFrame.HLine)
+        self._translate_separator.setFixedHeight(1)
+        self._translate_separator.setStyleSheet(
+            f"background: {S.SEPARATOR}; border: none; margin: 4px 8px;"
+        )
+
         self._translate_header.hide()
         self._translate_text.hide()
+        self._translate_separator.hide()
+        layout.addWidget(self._translate_separator)
         layout.addWidget(self._translate_header)
         layout.addWidget(self._translate_text, stretch=1)
 
@@ -761,10 +1004,92 @@ class ResultWindow(QMainWindow):
         self._set_busy(True, "OCR 인식 중…")
         self._text.setPlainText("")
         self._show_busy_overlay("인식 중…")
-        self._worker = _OCRWorker(self._image, self._lang)
+        self._worker = _OCRWorker(self._image, self._lang, cloud_config=self._cloud_config)
         self._worker.finished_ok.connect(self._on_ocr_ok)
         self._worker.failed.connect(self._on_ocr_failed)
         self._worker.start()
+
+    def _start_cloud_ocr(self) -> None:
+        """수동 클라우드 인식 — 로컬 결과와 무관하게 클라우드만 호출."""
+        if self._image is None:
+            QMessageBox.information(self, "OCR", "OCR할 이미지가 없습니다.")
+            return
+        if not self._cloud_config.is_ready():
+            QMessageBox.information(
+                self, "클라우드 OCR 설정 필요",
+                "트레이 메뉴 → '설정…'에서 클라우드 OCR 활성화 + API 키 입력이 필요합니다.",
+            )
+            return
+        if self._worker and self._worker.isRunning():
+            return
+        self._set_busy(True, "클라우드 OCR…")
+        self._show_busy_overlay("클라우드 인식 중…")
+        self._worker = _OCRWorker(
+            self._image, self._lang,
+            cloud_config=self._cloud_config, force_cloud=True,
+        )
+        self._worker.finished_ok.connect(self._on_ocr_ok)
+        self._worker.failed.connect(self._on_ocr_failed)
+        self._worker.start()
+
+    def reload_cloud_config(self) -> None:
+        """설정 다이얼로그에서 저장 후 호출. 다음 OCR 부터 새 설정 적용."""
+        from .settings_dialog import load_cloud_config
+        self._cloud_config = load_cloud_config()
+        self._sync_policy_combo_from_config()
+        self._update_cloud_button_state()
+        log.info(
+            "ResultWindow: cloud config reloaded (enabled=%s, policy=%s, ready=%s)",
+            self._cloud_config.enabled, self._cloud_config.policy,
+            self._cloud_config.is_ready(),
+        )
+
+    def _sync_policy_combo_from_config(self) -> None:
+        """현재 self._cloud_config.policy 와 콤보 선택을 일치시킴.
+        시그널 일시 차단으로 _on_policy_combo_changed 재진입 방지.
+        """
+        if not hasattr(self, "_policy_combo"):
+            return
+        idx = self._policy_combo.findData(self._cloud_config.policy)
+        if idx < 0:
+            return
+        self._policy_combo.blockSignals(True)
+        try:
+            self._policy_combo.setCurrentIndex(idx)
+        finally:
+            self._policy_combo.blockSignals(False)
+
+    def _on_policy_combo_changed(self) -> None:
+        """툴바 콤보에서 정책 변경 시 즉시 QSettings 에 저장 + 캐시 갱신."""
+        new_policy = self._policy_combo.currentData()
+        if not new_policy:
+            return
+        from .settings_dialog import save_policy_only
+        save_policy_only(str(new_policy))
+        # 캐시 갱신 (frozen dataclass 라서 새 인스턴스 만들기)
+        self._cloud_config = CloudOCRConfig(
+            enabled=self._cloud_config.enabled,
+            provider=self._cloud_config.provider,
+            google_api_key=self._cloud_config.google_api_key,
+            policy=str(new_policy),
+        )
+        log.info("Cloud OCR policy changed (toolbar): %s", new_policy)
+
+    def _update_cloud_button_state(self) -> None:
+        """클라우드 버튼 활성화/툴팁을 현재 설정 기준으로 갱신."""
+        if not hasattr(self, "_cloud_btn"):
+            return
+        ready = self._cloud_config.is_ready()
+        self._cloud_btn.setEnabled(ready)
+        if ready:
+            self._cloud_btn.setToolTip(
+                f"클라우드 OCR ({self._cloud_config.provider})로 다시 인식 — "
+                "로컬 결과를 덮어씀"
+            )
+        else:
+            self._cloud_btn.setToolTip(
+                "트레이 → '설정…'에서 클라우드 OCR 활성화 + API 키 입력 필요"
+            )
 
     def _show_busy_overlay(self, label: str) -> None:
         if self._busy_overlay is not None:
@@ -1082,7 +1407,8 @@ class ResultWindow(QMainWindow):
         QMessageBox.warning(self, "번역 실패", f"번역 중 오류:\n{message}")
 
     def _set_translation_visible(self, visible: bool) -> None:
-        """번역 헤더(라벨 + 복사 버튼)와 텍스트 박스를 함께 보이거나 숨김."""
+        """번역 헤더 + 텍스트 박스 + 위 구분선을 함께 보이거나 숨김."""
+        self._translate_separator.setVisible(visible)
         self._translate_header.setVisible(visible)
         self._translate_text.setVisible(visible)
 

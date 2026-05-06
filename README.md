@@ -122,9 +122,38 @@ src/
 
 - **QR 인식** (`features/barcode.py`) — OpenCV QR 디텍터 기본. `pyzbar` 설치 시 1D 바코드까지 인식. 결과창에 별도 패널로 표시.
 - **자동 전처리** (`features/preprocess.py`) — UI 노출 없이 백그라운드 적용:
-  - 어두운 배경(흰 글자/검은 배경 터미널) 자동 감지 후 색반전
   - 텍스트 기울어짐 자동 보정 (감지 시에만)
-  - 음영/조명 불균일 사진은 자동 적응형 이진화 (스크린샷처럼 깨끗한 이미지는 건너뜀)
+  - 저신뢰 OCR 재시도 시 CLAHE + 언샤프 (`enhance_for_retry`)
+- **클라우드 OCR** (`features/cloud_ocr.py`) — 사용자 본인 API 키 사용:
+  - Google Cloud Vision 지원
+  - 자동 폴백: 로컬 OCR 신뢰도 낮을 때 자동 호출
+  - 수동 트리거: 결과창 "☁ 클라우드 인식" 버튼
+
+### 클라우드 OCR 설정 (Google Vision)
+
+OCR 인식률이 부족한 경우(굵은 글씨, 옅은 배경, 작은 글자 등) Google Cloud Vision 으로 보강할 수 있습니다.
+
+#### 1) Google Cloud Console에서 API 키 발급
+
+1. https://console.cloud.google.com 접속 후 프로젝트 생성/선택
+2. **API 및 서비스 → 라이브러리** → "Cloud Vision API" 검색 → **사용 설정**
+3. **API 및 서비스 → 사용자 인증 정보** → **사용자 인증 정보 만들기 → API 키**
+4. 생성된 키 복사 (`AIzaSy...` 형식)
+5. (권장) "키 제한" 으로 Cloud Vision API에만 사용 가능하도록 제한
+
+#### 2) Binave OCR 에 키 입력
+
+- 트레이 아이콘 우클릭 → **설정…**
+- "클라우드 OCR 활성화" 체크
+- API 키 붙여넣기
+- 자동 폴백 원하면 체크 (첫 활성화 시 비용 안내 다이얼로그)
+- **저장**
+
+#### 3) 비용
+
+- Google Vision DOCUMENT_TEXT_DETECTION: **월 1,000장 무료**, 이후 약 $1.50 / 1,000장
+- 사용자 본인 결제 — Binave OCR 은 키만 사용
+- 자동 폴백은 로컬 결과가 약할 때만 호출 (모든 캡처마다 호출 X)
 
 ## 향후 추가 예정
 

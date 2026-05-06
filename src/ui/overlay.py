@@ -5,6 +5,7 @@ ESC로 취소, Enter로 즉시 확정.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
@@ -20,7 +21,9 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QWidget
 
-from ..core.capture import Rect
+from ..core.capture import Rect, build_screen_mapping, qt_logical_rect_to_physical
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -70,7 +73,12 @@ class RegionOverlay(QWidget):
 
     # ── lifecycle ────────────────────────────────────────────────
     def show_overlay(self) -> None:
-        self.showFullScreen()
+        # 멀티 모니터: showFullScreen()은 단일 모니터만 덮어 _origin 과 widget geometry 가
+        # 어긋남(예: screen[1]이 -116y에 있으면 캡처가 116px 위로 어긋남).
+        # setGeometry(virtual) + show() 로 가상 화면 전체 덮기.
+        geom = _virtual_geometry()
+        self.setGeometry(geom.x, geom.y, geom.width, geom.height)
+        self.show()
         self.raise_()
         self.activateWindow()
 
@@ -142,9 +150,36 @@ class RegionOverlay(QWidget):
             self.close()
             return
 
-        # 위젯 좌표 → 가상 화면 좌표
-        global_x = local.x() + self._origin.x()
-        global_y = local.y() + self._origin.y()
-        rect = Rect(global_x, global_y, local.width(), local.height())
+        # 1) 위젯 좌표 → Qt 가상 화면 logical 좌표
+        #    _origin (생성자에서 미리 계산된 값) 대신 실제 widget geometry 의 topLeft 사용.
+        #    이유: showFullScreen / WM 간섭 등으로 setGeometry 가 무효화되면 _origin 이 stale 이 됨.
+        actual_origin = self.geometry().topLeft()
+        qt_x = local.x() + actual_origin.x()
+        qt_y = local.y() + actual_origin.y()
+
+        # 2) Qt logical → Windows physical (모니터별 DPR 대응)
+        #    mss 는 physical 픽셀 단위라 변환 필수.
+        mapping = build_screen_mapping()
+        rect = qt_logical_rect_to_physical(qt_x, qt_y, local.width(), local.height(), mapping)
+
+        # ── 진단 로그 (오프셋 디버깅용) ──
+        log.info(
+            "overlay: widget_geom=(%d,%d %dx%d), _origin=(%d,%d) actual_origin=(%d,%d), local=(%d,%d %dx%d)",
+            self.geometry().x(), self.geometry().y(),
+            self.geometry().width(), self.geometry().height(),
+            self._origin.x(), self._origin.y(),
+            actual_origin.x(), actual_origin.y(),
+            local.x(), local.y(), local.width(), local.height(),
+        )
+        log.info(
+            "overlay: qt_logical=(%d,%d %dx%d) → physical=%s",
+            qt_x, qt_y, local.width(), local.height(), rect,
+        )
+        for i, m in enumerate(mapping):
+            log.info(
+                "overlay: screen[%d] qt=(%d,%d %dx%d) dpr=%.3f phys_origin=(%d,%d)",
+                i, m.qt_x, m.qt_y, m.qt_w, m.qt_h, m.dpr, m.phys_x, m.phys_y,
+            )
+
         self.selected.emit(rect)
         self.close()

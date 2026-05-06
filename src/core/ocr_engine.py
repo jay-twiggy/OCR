@@ -280,6 +280,38 @@ def _save_debug_image(arr: np.ndarray) -> None:
         log.exception("recognize: failed to save debug image")
 
 
+# ── Detection 파라미터 튜닝 (한국어 작은 글자 검출률 향상) ────────────────
+# 낮은 임계값 = 더 많은 픽셀/박스가 글자 후보로 통과 (recall ↑, 노이즈도 약간 ↑).
+# 큰 unclip_ratio = 검출된 박스 외곽을 더 넓게 잡음 → 가장자리 글자 잘림 방지.
+# 노이즈는 _format_text 의 min_confidence=0.2 필터에서 1차로 컷됨.
+#
+# 기본값 vs 튜닝값:
+#   text_det_thresh:        0.30 → 0.20  (픽셀 임계값, 글자/배경 구분)
+#   text_det_box_thresh:    0.60 → 0.40  (박스 신뢰도 임계값)
+#   text_det_unclip_ratio:  1.50 → 2.00  (박스 확장 배율)
+_DET_THRESH = 0.2
+_DET_BOX_THRESH = 0.4
+_DET_UNCLIP_RATIO = 2.0
+
+
+def _detection_kwargs_v3() -> dict:
+    """PaddleOCR 3.x 검출 파라미터 이름."""
+    return {
+        "text_det_thresh": _DET_THRESH,
+        "text_det_box_thresh": _DET_BOX_THRESH,
+        "text_det_unclip_ratio": _DET_UNCLIP_RATIO,
+    }
+
+
+def _detection_kwargs_v2() -> dict:
+    """PaddleOCR 2.x 검출 파라미터 이름 (호환 폴백)."""
+    return {
+        "det_db_thresh": _DET_THRESH,
+        "det_db_box_thresh": _DET_BOX_THRESH,
+        "det_db_unclip_ratio": _DET_UNCLIP_RATIO,
+    }
+
+
 def _construct_paddle(PaddleOCR, lang: str):
     """PaddleOCR 생성자 호환 처리.
 
@@ -288,17 +320,35 @@ def _construct_paddle(PaddleOCR, lang: str):
     따라서 `lang="korean"` + 기본 모델 = `korean_PP-OCRv5_mobile_rec` 조합이 PaddleOCR 내에서 한국어 최고 인식기.
 
     OneDNN 버그 회피를 위해 enable_mkldnn=False도 함께 전달.
+    검출 튜닝 파라미터(_detection_kwargs_v3/v2)를 우선 시도, 거부되면 점진적 폴백.
     """
-    last_err: Exception | None = None
-    for kwargs in (
+    det_v3 = _detection_kwargs_v3()
+    det_v2 = _detection_kwargs_v2()
+
+    attempts = [
+        # 3.x + detection 튜닝 (최우선)
+        {"use_textline_orientation": True, "enable_mkldnn": False, "lang": lang, **det_v3},
         {"use_textline_orientation": True, "enable_mkldnn": False, "lang": lang},
+        {"use_textline_orientation": True, "lang": lang, **det_v3},
         {"use_textline_orientation": True, "lang": lang},
+        # 2.x + detection 튜닝
+        {"use_angle_cls": True, "lang": lang, **det_v2},
         {"use_angle_cls": True, "lang": lang},
+        # 최후 폴백
         {"lang": lang},
-    ):
+    ]
+
+    last_err: Exception | None = None
+    for kwargs in attempts:
         try:
             log.debug("Try PaddleOCR(%s)", kwargs)
-            return PaddleOCR(**kwargs)
+            ocr = PaddleOCR(**kwargs)
+            tuned_keys = [k for k in kwargs if k.startswith(("text_det_", "det_db_"))]
+            if tuned_keys:
+                log.info("PaddleOCR constructed with detection tuning: %s", tuned_keys)
+            else:
+                log.info("PaddleOCR constructed with default detection params")
+            return ocr
         except TypeError as exc:
             log.debug("PaddleOCR kwargs %s rejected: %s", list(kwargs), exc)
             last_err = exc
