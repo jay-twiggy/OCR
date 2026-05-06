@@ -74,13 +74,37 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          # 임시 키체인 생성 + 인증서 import
+          # ── 진단: secret 무결성 검증 (값은 노출 안 함, 길이/해시만) ──
+          echo "→ Diagnostic info (no values leaked)"
+          echo "  Password length:  ${#APPLE_CERTIFICATE_PASSWORD}"
+          echo "  Base64 length:    ${#APPLE_CERTIFICATE_P12_BASE64}"
+          echo "  Keychain pw len:  ${#KEYCHAIN_PASSWORD}"
+
+          # base64 디코드 → .p12 파일
+          echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > $RUNNER_TEMP/cert.p12
+
+          P12_SIZE=$(wc -c < $RUNNER_TEMP/cert.p12)
+          P12_SHA=$(shasum -a 256 $RUNNER_TEMP/cert.p12 | cut -d' ' -f1)
+          echo "  Decoded .p12 size: $P12_SIZE bytes (local was 3364)"
+          echo "  Decoded .p12 sha256: $P12_SHA"
+
+          # ── 진단: openssl 로 비밀번호 검증 (security import 전에 직접 확인) ──
+          echo "→ Verifying .p12 with secret password via openssl..."
+          if openssl pkcs12 -in $RUNNER_TEMP/cert.p12 -nokeys -info \
+              -passin "pass:$APPLE_CERTIFICATE_PASSWORD" 2>&1 | head -3; then
+            echo "  ✓ openssl 통과 — .p12 와 password secret 일치"
+          else
+            echo "  ✗ openssl 실패 — secret 의 base64 또는 password 가 잘못됨"
+            echo "    (secret 값 자체는 노출 안 됐으니 안전, 갱신 후 재시도)"
+            exit 1
+          fi
+
+          # ── 임시 키체인 생성 + 인증서 import ──
           KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain-db
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 3600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          echo "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > $RUNNER_TEMP/cert.p12
           security import $RUNNER_TEMP/cert.p12 -k "$KEYCHAIN_PATH" \
             -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
