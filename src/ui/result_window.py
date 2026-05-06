@@ -366,10 +366,11 @@ class _OCRWorker(QThread):
     ) -> tuple[OCRResult, str]:
         """자동 폴백: 로컬 결과가 여전히 약하면 클라우드 호출 후 더 좋은 쪽 채택.
 
-        설정 OFF 또는 키 미설정이면 즉시 패스. 네트워크/API 오류는 로컬 결과 유지.
+        호출 전제: 호출자(OCRWorker.run)가 이미 policy == AUTO_FALLBACK 검증함.
+        여기서는 키 설정 여부 + low-quality 여부만 체크.
         """
         cfg = self._cloud_config
-        if not cfg.auto_fallback or not cfg.is_ready():
+        if not cfg.is_ready():
             return result, engine
         if not _is_low_quality(result, engine):
             return result, engine
