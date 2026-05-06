@@ -45,9 +45,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-build.txt
 
-      - name: Install Playwright Chromium
-        run: |
-          python -m playwright install chromium
+      # 주의: Mac 빌드는 Chromium 을 번들하지 않음 (build_mac.spec 참조)
+      # 사용자가 첫 웹페이지 OCR 사용 시 직접 'playwright install chromium' 실행
 
       # ─────────────────────────────────────────────────────────
       # 3) OCR 모델 사전 다운로드 (~/.paddlex, ~/.EasyOCR)

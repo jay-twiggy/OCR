@@ -30,59 +30,33 @@ from PyInstaller.utils.hooks import (
 HOME = pathlib.Path.home()
 PADDLEX_DIR = HOME / ".paddlex"
 EASYOCR_DIR = HOME / ".EasyOCR"
-# macOS Playwright 캐시 위치 (Windows: AppData/Local/ms-playwright)
-PLAYWRIGHT_DIR = HOME / "Library" / "Caches" / "ms-playwright"
 
 _missing = [
     (label, p) for label, p in [
         ("PaddleOCR 모델 (.paddlex)", PADDLEX_DIR),
         ("EasyOCR 모델 (.EasyOCR)", EASYOCR_DIR),
-        ("Playwright Chromium", PLAYWRIGHT_DIR),
     ] if not p.exists()
 ]
 if _missing:
     msg = "\n".join(f"  - {lbl}: {p}" for lbl, p in _missing)
     raise SystemExit(
         f"[Binave OCR build] 다음 캐시를 찾을 수 없습니다:\n{msg}\n\n"
-        "scripts/prepare_models.py 를 먼저 실행하거나, "
-        "'playwright install chromium' 을 실행하세요."
+        "scripts/prepare_models.py 를 먼저 실행하세요."
     )
 
 
-# ── 데이터 (모델 + 브라우저 + 라이브러리 리소스) ─────────────────
-def _select_playwright_assets() -> list[tuple[str, str]]:
-    """Playwright 캐시에서 필요한 항목만 선별 번들 (macOS).
-
-    macOS 캐시도 Windows 와 동일 구조:
-        chromium-XXXX                  ✅ full chromium
-        chromium_headless_shell-XXXX   ❌ headless 전용 (미사용)
-        chromium-XXXX-2                구버전 잔재 (제외)
-        ffmpeg-XXXX                    ✅
-    """
-    if not PLAYWRIGHT_DIR.exists():
-        return []
-    keep_prefixes = ('chromium-', 'ffmpeg-')
-    latest: dict[str, pathlib.Path] = {}
-    for child in PLAYWRIGHT_DIR.iterdir():
-        if not child.is_dir():
-            continue
-        for prefix in keep_prefixes:
-            if child.name.startswith(prefix):
-                cur = latest.get(prefix)
-                if cur is None or child.name > cur.name:
-                    latest[prefix] = child
-                break
-    selected = sorted(latest.values(), key=lambda p: p.name)
-    for p in selected:
-        print(f"[spec] playwright bundle: {p.name}", file=sys.stderr)
-    return [(str(p), f"_bundled/ms-playwright/{p.name}") for p in selected]
-
+# ── 데이터 (모델 + 라이브러리 리소스) ────────────────────────────
+# 주의: macOS 에선 Playwright Chromium 을 번들에 포함하지 않는다.
+# 이유: Chrome.app 내부의 .framework 중첩 구조가 PyInstaller 의 ad-hoc 코드사인
+# (`--all-architectures` 하드코딩) 과 충돌해 빌드 실패함
+# ("bundle format unrecognized" / "subcomponent: ... Framework.framework").
+# 사용자는 첫 웹페이지 OCR 사용 시 'playwright install chromium' 1회 실행.
+# 메인 기능 (스크린샷/구역/파일 OCR) 은 영향 없음.
 
 datas = [
     (str(PADDLEX_DIR), '_bundled/.paddlex'),
     (str(EASYOCR_DIR), '_bundled/.EasyOCR'),
 ]
-datas += _select_playwright_assets()
 
 for pkg in (
     'paddle', 'paddleocr', 'paddlex',
